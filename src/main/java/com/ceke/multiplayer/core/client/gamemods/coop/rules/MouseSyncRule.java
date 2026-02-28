@@ -43,7 +43,7 @@ public class MouseSyncRule implements GameRule {
             float worldX = (float) gw.pixel().x();
             float worldY = (float) gw.pixel().y();
             CursorSyncManager.updateLocalCursor(worldX, worldY);
-        } catch (Throwable t) {
+        } catch (Exception e) {
             // Outside map area or view not ready
         }
     }

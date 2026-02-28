@@ -45,6 +45,9 @@ public class ModLoader {
     }
 
     public static void update(double ds) {
+        // Drive the join-overlay timer countdown (ContinueMode.TIMER)
+        com.ceke.multiplayer.core.client.ui.JoinOverlayManager.update(ds);
+
         // If we are playing as a client, tell the host we finished loading on the first
         // few ticks
         MultiplayerSession session = MultiplayerSession.instance();
@@ -82,6 +85,11 @@ public class ModLoader {
     }
 
     public static void mouseClick(MButt button) {
+        // Forward click to the join overlay (dismiss in CLICK mode)
+        if (com.ceke.multiplayer.core.client.ui.JoinOverlayManager.isActive()) {
+            com.ceke.multiplayer.core.client.ui.JoinOverlayManager.onClick();
+            return; // block game input while overlay is shown
+        }
         if (activeMod == null)
             return;
         for (GameRule rule : activeMod.getRules()) {

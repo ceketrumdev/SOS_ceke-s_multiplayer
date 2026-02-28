@@ -86,6 +86,7 @@ public final class GameClient {
         registerListeners();
         client.connect(timeoutMs, hostIp, HostServer.PORT, HostServer.PORT);
         connected = true;
+        joinFinishedSent = false; // reset for potential reconnect
 
         // Send handshake immediately
         client.sendTCP(new PacketHandshake(playerName, modVersion, ""));
@@ -118,10 +119,14 @@ public final class GameClient {
     }
 
     private boolean joinFinishedSent = false;
+    private boolean clientWaitingShown = false;
 
     /**
-     * Called by the local game client once the world view is fully initialized and
-     * ready.
+     * Called when the client player has confirmed they are ready.
+     * Sends {@code PacketJoinFinished} to the host, dismissing the host overlay.
+     * Registered as the
+     * {@link com.ceke.multiplayer.core.client.ui.JoinOverlayManager}
+     * client-ready callback so it fires on click or timer.
      */
     public void markJoinFinished() {
         if (!connected || joinFinishedSent)
@@ -132,17 +137,60 @@ public final class GameClient {
     }
 
     /**
-     * Called periodically in the render/update loop by ModLoader to know when to
-     * trigger markJoinFinished.
+     * Called periodically in the update loop by ModLoader.
+     *
+     * Phase 1 (tick == 6): game is initialised.
+     * → Report 95% progress to the host overlay.
+     * Phase 2 (tick &gt;= 40): world is fully rendered.
+     * → Activate the CLIENT overlay (click/timer continue mode).
+     * When the player confirms, the overlay fires {@link #markJoinFinished()}.
      */
     public void checkJoinFinished() {
         if (!connected || joinFinishedSent)
             return;
 
-        // Wait until GAME state is constructed and updating
-        if (game.GAME.s() != null && game.GAME.updateI() > 5) {
-            markJoinFinished();
+        if (game.GAME.s() == null)
+            return;
+
+        long tick = game.GAME.updateI();
+
+        if (tick <= 5)
+            return;
+
+        if (tick == 6) {
+            sendProgress("World loaded!", 0.95f);
+            return;
         }
+
+        if (tick >= 40 && !clientWaitingShown) {
+            clientWaitingShown = true;
+            // Register ourselves as the callback so the overlay fires markJoinFinished
+            // when the player clicks (or the timer expires).
+            com.ceke.multiplayer.core.client.ui.JoinOverlayManager.setClientReadyCallback(this::markJoinFinished);
+            com.ceke.multiplayer.core.client.ui.JoinOverlayManager.activateClientWaiting();
+            LOG.info("[GameClient] Client overlay activated – waiting for player confirmation.");
+        }
+    }
+
+    /**
+     * Reports a loading milestone to the host so it can relay it to waiting
+     * players. Safe to call from any thread.
+     *
+     * @param status  human-readable step label (e.g. "Loading save…")
+     * @param percent fraction 0.0–1.0
+     */
+    public void sendProgress(String status, float percent) {
+        if (!connected)
+            return;
+        client.sendTCP(new PacketJoinProgress(status, percent));
+        LOG.fine("[GameClient] Progress sent: " + status + " (" + (int) (percent * 100) + "%)");
+    }
+
+    /** Sends a speed change to the host (host will validate and relay back). */
+    public void sendSpeedChange(com.ceke.multiplayer.core.server.network.packets.PacketSpeedChange pkt) {
+        if (!connected)
+            return;
+        client.sendTCP(pkt);
     }
 
     /** Sends a chat message to the host. */
@@ -181,6 +229,44 @@ public final class GameClient {
                 connected = false;
                 CursorSyncManager.setRemoteCursor(0f, 0f);
                 LOG.info("[GameClient] Lost connection to host.");
+
+                // If we are already trying to reconnect, don't start another thread
+                if (com.ceke.multiplayer.core.client.ui.JoinOverlayManager.isReconnectingMode()) {
+                    return;
+                }
+
+                // Trigger overlay and pause
+                com.ceke.multiplayer.core.client.ui.JoinOverlayManager.activateReconnecting();
+
+                // Start background reconnect loop
+                new Thread(() -> {
+                    while (!connected && com.ceke.multiplayer.core.client.ui.JoinOverlayManager.isReconnectingMode()) {
+                        try {
+                            LOG.info("[GameClient] Attempting to reconnect...");
+                            client.reconnect(5000);
+
+                            // If reconnect doesn't throw an Exception, we connected successfully!
+                            connected = true;
+                            joinFinishedSent = false;
+                            clientWaitingShown = false;
+
+                            // Force transition to menu so the impending PacketWorldLoad is processed
+                            // properly
+                            menu.ScMainBridge.returnToMenu();
+
+                            client.sendTCP(new PacketHandshake(playerName, modVersion, "")); // Must re-send handshake!
+
+                            com.ceke.multiplayer.core.client.ui.JoinOverlayManager.deactivateReconnecting();
+                            LOG.info("[GameClient] Reconnect successful! Returning to menu to reload map.");
+                            break;
+                        } catch (Exception e) {
+                            try {
+                                Thread.sleep(1000);
+                            } catch (Exception ignored) {
+                            }
+                        }
+                    }
+                }, "CEKE-Reconnect-Thread").start();
             }
 
             @Override
@@ -194,18 +280,31 @@ public final class GameClient {
                     }
                 }
 
+                if (object instanceof com.ceke.multiplayer.core.server.network.packets.PacketSpeedChange sc) {
+                    com.ceke.multiplayer.core.client.gamemods.coop.rules.TimeSyncRule.applyRemoteSpeed(sc.speed);
+                    LOG.info("[GameClient] Applied remote speed change from host: " + sc.speed);
+                }
+
+                if (object instanceof com.ceke.multiplayer.core.server.network.packets.PacketSyncResources syncPkt) {
+                    com.ceke.multiplayer.core.client.gamemods.coop.rules.ResourceSyncRule.applyRemoteResources(syncPkt);
+                }
+
                 if (object instanceof PacketWorldLoad pwl) {
                     if (pwl.saveZipBytes == null || pwl.saveZipBytes.length == 0) {
                         LOG.info("[GameClient] Host started a new game. Loading empty world.");
+                        sendProgress("Creating world...", 0.10f);
                         menu.ScMainBridge.clientLoadSave("");
                     } else {
                         LOG.info("[GameClient] Received world save zip (" + pwl.saveZipBytes.length + " bytes).");
+                        sendProgress("Received world data...", 0.10f);
                         try {
                             String appdata = System.getenv("APPDATA");
                             java.nio.file.Path targetFile = java.nio.file.Paths.get(appdata, "songsofsyx", "saves",
                                     "saves", "MP_Downloaded.save");
-                            com.ceke.multiplayer.core.server.sync.SaveSyncManager.unzipSaveFile(pwl.saveZipBytes, targetFile);
+                            com.ceke.multiplayer.core.server.sync.SaveSyncManager.unzipSaveFile(pwl.saveZipBytes,
+                                    targetFile);
                             LOG.info("[GameClient] Save unzipped. Triggering game load...");
+                            sendProgress("Loading world...", 0.30f);
                             menu.ScMainBridge.clientLoadSave("MP_Downloaded");
                         } catch (java.io.IOException e) {
                             LOG.log(Level.SEVERE, "[GameClient] Failed to load downloaded save", e);
@@ -219,7 +318,8 @@ public final class GameClient {
                 }
 
                 if (object instanceof com.ceke.multiplayer.core.server.network.packets.PacketJoinProgress p) {
-                    com.ceke.multiplayer.core.client.ui.JoinOverlayManager.updateProgress(p.statusText, p.progressPercent);
+                    com.ceke.multiplayer.core.client.ui.JoinOverlayManager.updateProgress(p.statusText,
+                            p.progressPercent);
                 }
 
                 if (object instanceof com.ceke.multiplayer.core.server.network.packets.PacketOverlayClear) {
@@ -253,5 +353,9 @@ public final class GameClient {
 
     public boolean isConnected() {
         return connected;
+    }
+
+    public int getPing() {
+        return client.getReturnTripTime();
     }
 }

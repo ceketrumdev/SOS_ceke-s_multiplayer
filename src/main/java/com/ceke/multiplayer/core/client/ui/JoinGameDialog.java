@@ -48,9 +48,16 @@ public final class JoinGameDialog extends GuiSection {
         connectBtn.clickActionSet(() -> {
             String ip = ipBuffer.toString().trim();
             if (!ip.isEmpty()) {
-                visible = false;
-                MultiplayerSession.instance().joinGame(ip);
-                LOG.info("[JoinGameDialog] Joining: " + ip);
+                try {
+                    // Validate IP address format / resolution
+                    java.net.InetAddress.getByName(ip);
+
+                    visible = false;
+                    MultiplayerSession.instance().joinGame(ip);
+                    LOG.info("[JoinGameDialog] Joining: " + ip);
+                } catch (Exception e) {
+                    LOG.warning("[JoinGameDialog] Invalid IP Address entered: " + ip);
+                }
             }
         });
         addDown(8, connectBtn);

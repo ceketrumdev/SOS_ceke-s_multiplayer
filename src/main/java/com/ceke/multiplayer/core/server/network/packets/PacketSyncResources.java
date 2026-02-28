@@ -8,7 +8,7 @@
 /* #+#    #+# #+#        #+#   #+#  #+#                                       */
 /* ########  ########## ###    ### ##########                                 */
 /*                                                                            */
-/*   CoopGameMod.java                                                       */
+/*   JoinGameDialog.java                                                    */
 /*                                                                            */
 /*   By: ceketrum <ferrando.ryan.mickael@gmail.com>                         */
 /*                                                                            */
@@ -17,29 +17,24 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-package com.ceke.multiplayer.core.client.gamemods.coop;
+package com.ceke.multiplayer.core.server.network.packets;
 
-import com.ceke.multiplayer.core.server.GameMod;
-import com.ceke.multiplayer.core.client.gamemods.coop.rules.MouseSyncRule;
-import com.ceke.multiplayer.core.client.gamemods.coop.rules.TimeSyncRule;
+/**
+ * Sent by the host to synchronize the exact resource quantities to clients.
+ * This covers the internal arrays for the stockpiles, haulers, exports, and
+ * imports.
+ */
+public class PacketSyncResources {
+    public int[] stockpileAms;
+    public int[] stockpileReservedAms;
+    public int[] haulerAms;
+    public int[] haulerReservedAms;
+    public int[] haulerSpace;
+    public int[] haulerSpaceReserved;
+    public int[] exportAms;
+    public int[] exportPromised;
+    public int[] importAms;
 
-public class CoopGameMod extends GameMod {
-
-    public CoopGameMod() {
-        // Register the rules for this specific game mode
-        rules.add(new MouseSyncRule());
-        rules.add(new TimeSyncRule());
-        rules.add(new com.ceke.multiplayer.core.client.gamemods.coop.rules.PingDisplayRule());
-        rules.add(new com.ceke.multiplayer.core.client.gamemods.coop.rules.ResourceSyncRule());
-    }
-
-    @Override
-    public String getName() {
-        return "Co-op";
-    }
-
-    @Override
-    public int getMaxPlayers() {
-        return 2;
+    public PacketSyncResources() {
     }
 }

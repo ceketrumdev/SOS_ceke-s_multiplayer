@@ -8,38 +8,38 @@
 /* #+#    #+# #+#        #+#   #+#  #+#                                       */
 /* ########  ########## ###    ### ##########                                 */
 /*                                                                            */
-/*   CoopGameMod.java                                                       */
+/*   PacketSpeedChange.java                                                 */
 /*                                                                            */
 /*   By: ceketrum <ferrando.ryan.mickael@gmail.com>                         */
 /*                                                                            */
-/*   Created: 2026/02/28 15:02:29 by ceketrum                               */
-/*   Updated: 2026/02/28 15:02:29 by ceketrum                               */
+/*   Created: 2026/02/28 19:08:26 by ceketrum                               */
+/*   Updated: 2026/02/28 19:08:26 by ceketrum                               */
 /*                                                                            */
 /* ************************************************************************** */
 
-package com.ceke.multiplayer.core.client.gamemods.coop;
+package com.ceke.multiplayer.core.server.network.packets;
 
-import com.ceke.multiplayer.core.server.GameMod;
-import com.ceke.multiplayer.core.client.gamemods.coop.rules.MouseSyncRule;
-import com.ceke.multiplayer.core.client.gamemods.coop.rules.TimeSyncRule;
+/**
+ * Sent by any player when they change the game speed.
+ *
+ * Flow:
+ * CLIENT changes speed → sends this to HOST
+ * HOST validates → applies locally → re-broadcasts to all OTHER clients
+ * HOST changes speed → broadcasts directly to all clients
+ *
+ * {@code speed} maps to {@code game.GAME.SPEED.speedTarget()} values:
+ * 0 = paused, 1 = normal, 2 = fast, 3 = fastest
+ */
+public class PacketSpeedChange {
 
-public class CoopGameMod extends GameMod {
+    /** Target game speed (0–3). */
+    public int speed;
 
-    public CoopGameMod() {
-        // Register the rules for this specific game mode
-        rules.add(new MouseSyncRule());
-        rules.add(new TimeSyncRule());
-        rules.add(new com.ceke.multiplayer.core.client.gamemods.coop.rules.PingDisplayRule());
-        rules.add(new com.ceke.multiplayer.core.client.gamemods.coop.rules.ResourceSyncRule());
+    /** KryoNet requires a no-arg constructor. */
+    public PacketSpeedChange() {
     }
 
-    @Override
-    public String getName() {
-        return "Co-op";
-    }
-
-    @Override
-    public int getMaxPlayers() {
-        return 2;
+    public PacketSpeedChange(int speed) {
+        this.speed = speed;
     }
 }

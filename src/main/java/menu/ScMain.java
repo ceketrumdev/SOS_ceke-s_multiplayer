@@ -1,22 +1,3 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*       ::::::::  :::::::::: :::    ::: ::::::::::                           */
-/*     :+:    :+: :+:        :+:   :+:  :+:                                   */
-/*    +:+        +:+        +:+  +:+   +:+                                    */
-/*   +#+        +#++:++#   +#++:++    +#++:++#                                */
-/*  +#+        +#+        +#+  +#+   +#+                                      */
-/* #+#    #+# #+#        #+#   #+#  #+#                                       */
-/* ########  ########## ###    ### ##########                                 */
-/*                                                                            */
-/*   ScMain.java                                                            */
-/*                                                                            */
-/*   By: ceketrum <ferrando.ryan.mickael@gmail.com>                         */
-/*                                                                            */
-/*   Created: 2026/02/28 15:02:29 by ceketrum                               */
-/*   Updated: 2026/02/28 15:02:29 by ceketrum                               */
-/*                                                                            */
-/* ************************************************************************** */
-
 package menu;
 
 import static menu.GUI.getBackArrow;
@@ -402,11 +383,27 @@ class ScMain implements SC {
             String saveName = pendingClientSaveName;
 
             if (lastMenu != null) {
+                // Helper to access the game client for progress reporting
+                com.ceke.multiplayer.core.server.network.GameClient gc = null;
+                com.ceke.multiplayer.core.server.MultiplayerSession sess = com.ceke.multiplayer.core.server.MultiplayerSession
+                        .instance();
+                if (sess != null && sess.isClient()) {
+                    gc = sess.getGameClient();
+                }
+                final com.ceke.multiplayer.core.server.network.GameClient gameClient = gc;
+
                 if (saveName == null || saveName.trim().isEmpty()) {
                     // Host started a new game
                     snake2d.CORE.setCurrentState(new snake2d.CORE_STATE.Constructor() {
                         @Override
                         public snake2d.CORE_STATE getState() {
+                            game.GAME.addOnInit(new snake2d.util.misc.ACTION() {
+                                @Override
+                                public void exe() {
+                                    if (gameClient != null)
+                                        gameClient.sendProgress("Initializing systems...", 0.80f);
+                                }
+                            });
                             return game.GAME.create();
                         }
                     });
@@ -417,7 +414,17 @@ class ScMain implements SC {
                     lastMenu.start(new game.save.GameLoader(p) {
                         @Override
                         public void doAfterSet() {
-                            // Hook for any client-side post-load logic
+                            // Step 2: save file has been parsed
+                            if (gameClient != null)
+                                gameClient.sendProgress("Loading world...", 0.60f);
+                            // Step 3: hook into game init to report 80%
+                            game.GAME.addOnInit(new snake2d.util.misc.ACTION() {
+                                @Override
+                                public void exe() {
+                                    if (gameClient != null)
+                                        gameClient.sendProgress("Initializing systems...", 0.80f);
+                                }
+                            });
                         }
                     });
                 }
@@ -425,7 +432,8 @@ class ScMain implements SC {
             return;
         }
 
-        com.ceke.multiplayer.core.client.ui.MultiplayerMenu mpMenu = com.ceke.multiplayer.MultiplayerMod.getMenuInstance();
+        com.ceke.multiplayer.core.client.ui.MultiplayerMenu mpMenu = com.ceke.multiplayer.MultiplayerMod
+                .getMenuInstance();
 
         boolean mpVisible = mpMenu != null && mpMenu.isVisible();
 
@@ -445,7 +453,8 @@ class ScMain implements SC {
 
     @Override
     public boolean hover(COORDINATE mCoo) {
-        com.ceke.multiplayer.core.client.ui.MultiplayerMenu mpMenu = com.ceke.multiplayer.MultiplayerMod.getMenuInstance();
+        com.ceke.multiplayer.core.client.ui.MultiplayerMenu mpMenu = com.ceke.multiplayer.MultiplayerMod
+                .getMenuInstance();
         if (mpMenu != null && mpMenu.isVisible()) {
             return mpMenu.hover(mCoo);
         }
@@ -454,7 +463,8 @@ class ScMain implements SC {
 
     @Override
     public boolean click() {
-        com.ceke.multiplayer.core.client.ui.MultiplayerMenu mpMenu = com.ceke.multiplayer.MultiplayerMod.getMenuInstance();
+        com.ceke.multiplayer.core.client.ui.MultiplayerMenu mpMenu = com.ceke.multiplayer.MultiplayerMod
+                .getMenuInstance();
         if (mpMenu != null && mpMenu.isVisible()) {
             return mpMenu.click();
         }
@@ -463,7 +473,8 @@ class ScMain implements SC {
 
     @Override
     public boolean back(Menu menu) {
-        com.ceke.multiplayer.core.client.ui.MultiplayerMenu mpMenu = com.ceke.multiplayer.MultiplayerMod.getMenuInstance();
+        com.ceke.multiplayer.core.client.ui.MultiplayerMenu mpMenu = com.ceke.multiplayer.MultiplayerMod
+                .getMenuInstance();
         if (mpMenu != null && mpMenu.isVisible()) {
             mpMenu.setVisible(false);
             return true;

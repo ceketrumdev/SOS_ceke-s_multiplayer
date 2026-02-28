@@ -29,6 +29,8 @@ import com.ceke.multiplayer.core.server.network.packets.PacketJoinStarted;
 import com.ceke.multiplayer.core.server.network.packets.PacketJoinProgress;
 import com.ceke.multiplayer.core.server.network.packets.PacketJoinFinished;
 import com.ceke.multiplayer.core.server.network.packets.PacketOverlayClear;
+import com.ceke.multiplayer.core.server.network.packets.PacketSpeedChange;
+import com.ceke.multiplayer.core.server.network.packets.PacketSyncResources;
 import com.esotericsoftware.kryonet.EndPoint;
 
 /**
@@ -63,5 +65,11 @@ public final class PacketRegistry {
         kryo.register(PacketJoinProgress.class);
         kryo.register(PacketJoinFinished.class);
         kryo.register(PacketOverlayClear.class);
+
+        // Time / speed sync
+        kryo.register(PacketSpeedChange.class);
+
+        // Resource sync
+        kryo.register(PacketSyncResources.class);
     }
 }

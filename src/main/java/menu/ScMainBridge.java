@@ -55,4 +55,14 @@ public final class ScMainBridge {
     public static void clientLoadSave(String saveName) {
         ScMain.clientLoadSave(saveName);
     }
+
+    /** Forces the client back to the main menu (e.g., on connection timeout). */
+    public static void returnToMenu() {
+        snake2d.CORE.setCurrentState(new snake2d.CORE_STATE.Constructor() {
+            @Override
+            public snake2d.CORE_STATE getState() {
+                return menu.Menu.make();
+            }
+        });
+    }
 }

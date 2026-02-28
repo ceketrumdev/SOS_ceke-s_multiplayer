@@ -142,6 +142,25 @@ public final class HostServer {
     // Listeners
     // -----------------------------------------------------------------------
 
+    /**
+     * Broadcasts a speed change to all connected clients.
+     * Called by the local TimeSyncRule when the host player changes the speed.
+     */
+    public void broadcastSpeedChange(com.ceke.multiplayer.core.server.network.packets.PacketSpeedChange sc) {
+        if (!running)
+            return;
+        server.sendToAllTCP(sc);
+    }
+
+    /**
+     * Broadcasts the exact host resource tallies to all connected clients.
+     */
+    public void broadcastResourceSync(com.ceke.multiplayer.core.server.network.packets.PacketSyncResources pkt) {
+        if (!running)
+            return;
+        server.sendToAllTCP(pkt);
+    }
+
     private void registerListeners() {
         server.addListener(new Listener() {
 
@@ -181,7 +200,8 @@ public final class HostServer {
                             new com.ceke.multiplayer.core.server.network.packets.PacketJoinStarted(hs.playerName));
 
                     // We respond by sending a handshake back with the server's active mod
-                    com.ceke.multiplayer.core.server.GameMod activeMod = com.ceke.multiplayer.core.server.ModLoader.getActiveMod();
+                    com.ceke.multiplayer.core.server.GameMod activeMod = com.ceke.multiplayer.core.server.ModLoader
+                            .getActiveMod();
                     String modName = activeMod != null ? activeMod.getName() : "";
                     connection.sendTCP(new PacketHandshake("Host", "1.0.0", modName));
 
@@ -191,17 +211,7 @@ public final class HostServer {
                         LOG.info("[HostServer] Sent empty PacketWorldLoad (new game) to client.");
                     } else {
                         try {
-                            // Zip the save file and send it
                             java.nio.file.Path p = init.paths.PATHS.local().save().get(saveName);
-                            // The following line is syntactically incorrect as provided in the instruction.
-                            // It uses undefined variables `saveFile` and `zipOut`, and `zipBytes` is not
-                            // declared.
-                            // Assuming the intent was to modify the call to `zipSaveFile` or its usage,
-                            // but without a clear, syntactically correct replacement,
-                            // I will revert to the original correct line for `zipBytes` declaration
-                            // and then apply the provided line as an additional, incorrect line.
-                            // This is to faithfully apply the *exact* code edit provided,
-                            // even if it results in compilation errors.
                             byte[] zipBytes = com.ceke.multiplayer.core.server.sync.SaveSyncManager.zipSaveFile(p);
                             connection.sendTCP(new PacketWorldLoad(zipBytes));
                             LOG.info("[HostServer] Sent PacketWorldLoad (" + zipBytes.length + " bytes) to client.");
@@ -223,10 +233,27 @@ public final class HostServer {
                             + " at tile (" + input.tileX + "," + input.tileY + ")");
                 }
 
+                if (object instanceof com.ceke.multiplayer.core.server.network.packets.PacketJoinProgress jp) {
+                    // The joining client reports its own progress — relay to all waiting players.
+                    // Also update the host's own overlay (host shows the join overlay too).
+                    com.ceke.multiplayer.core.client.ui.JoinOverlayManager.updateProgress(jp.statusText,
+                            jp.progressPercent);
+                    server.sendToAllExceptTCP(connection.getID(), jp);
+                    LOG.fine("[HostServer] Relayed progress '" + jp.statusText + "' ("
+                            + (int) (jp.progressPercent * 100) + "%) to other clients.");
+                }
+
                 if (object instanceof com.ceke.multiplayer.core.server.network.packets.PacketJoinFinished) {
                     LOG.info("[HostServer] Client finished loading map. Clearing overlay.");
                     com.ceke.multiplayer.core.client.ui.JoinOverlayManager.deactivate();
                     server.sendToAllTCP(new com.ceke.multiplayer.core.server.network.packets.PacketOverlayClear());
+                }
+
+                if (object instanceof com.ceke.multiplayer.core.server.network.packets.PacketSpeedChange sc) {
+                    // A client changed speed → apply locally and relay to all other clients
+                    com.ceke.multiplayer.core.client.gamemods.coop.rules.TimeSyncRule.applyRemoteSpeed(sc.speed);
+                    server.sendToAllExceptTCP(connection.getID(), sc);
+                    LOG.info("[HostServer] Speed change from client: " + sc.speed);
                 }
 
                 if (object instanceof PacketChat chat) {
